@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[97367,["/tala-logistics/_next/static/chunks/74f1b9da08b28ae5.js"],"ViewportBoundary"]
+3:I[97367,["/tala-logistics/_next/static/chunks/74f1b9da08b28ae5.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+5:I[27201,["/tala-logistics/_next/static/chunks/74f1b9da08b28ae5.js"],"IconMark"]
+0:{"buildId":"my-eGD7hQS9XE8LEgXOJX","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","2",{"name":"theme-color","content":"#0e6e5c"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"تلا — نظام التخليص الجمركي"}],["$","meta","1",{"name":"description","content":"نظام إدارة الملفات والتخليص الجمركي الداخلي — شركة تلا"}],["$","link","2",{"rel":"icon","href":"/tala-logistics/favicon.svg"}],["$","$L5","3",{}]]}]}]}],null]}],"loading":null,"isPartial":false}
