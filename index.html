@@ -144,6 +144,10 @@ tr:hover td{background:var(--accent)}
 .grid2{display:grid;grid-template-columns:1fr;gap:14px}
 @media(min-width:1024px){.grid2{grid-template-columns:1.4fr 1fr}}
 .sec-title{font-size:14px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.tool-box{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--muted)}
+.tb-title{font-weight:700;font-size:14px;display:flex;gap:8px;align-items:center}
+.tb-title svg{color:var(--primary)}
+.tb-sub{font-size:12px;color:var(--mutedFg);margin:6px 0 10px;line-height:1.8}
 .list-row{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);font-size:13px}
 .list-row:last-child{border-bottom:0}
 .list-row .grow{flex:1;min-width:0}
@@ -361,7 +365,9 @@ const ICONS = {
   eye:'<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
   wallet:'<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><rect x="13" y="9" width="8" height="6" rx="1"/>',
   send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
-  star:'<path d="M11.5 3.6a.5.5 0 0 1 1 0l2.1 5.3 5.7.4a.5.5 0 0 1 .3.9l-4.5 3.8 1.4 5.5a.5.5 0 0 1-.8.5L12 16.7l-4.7 3.3a.5.5 0 0 1-.8-.5l1.4-5.5-4.5-3.8a.5.5 0 0 1 .3-.9l5.7-.4z"/>'
+  star:'<path d="M11.5 3.6a.5.5 0 0 1 1 0l2.1 5.3 5.7.4a.5.5 0 0 1 .3.9l-4.5 3.8 1.4 5.5a.5.5 0 0 1-.8.5L12 16.7l-4.7 3.3a.5.5 0 0 1-.8-.5l1.4-5.5-4.5-3.8a.5.5 0 0 1 .3-.9l5.7-.4z"/>',
+  image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  minimize:'<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" x2="21" y1="10" y2="3"/><line x1="3" x2="10" y1="21" y2="14"/>'
 };
 function ic(name, size, cls){
   return '<svg '+(cls?('class="'+cls+'" '):'')+'width="'+(size||16)+'" height="'+(size||16)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(ICONS[name]||'')+'</svg>';
@@ -445,13 +451,14 @@ function seedDb(){
       email:'admin@tala.local',password:'123456',requireLogin:true,theme:'dark',
       seqFile:1,seqInv:1,seqQuo:1,seqRec:1},
     clients:[],shipments:[],documents:[],hsCodes:[],
-    invoices:[],quotations:[],payments:[],tasks:[],templates:[],
+    invoices:[],quotations:[],payments:[],tasks:[],templates:[],savedDocs:[],
     exchangeRates:[{currency:'USD',rate:50},{currency:'EUR',rate:54},{currency:'CNY',rate:7}],
     audit:[]
   };
 }
 let db;
-function loadDb(){try{const raw=localStorage.getItem(DB_KEY);if(raw){const d=JSON.parse(raw);if(d&&d.settings)return d}}catch(e){}return null}
+function normalizeDb(d){if(!Array.isArray(d.savedDocs))d.savedDocs=[];return d}
+function loadDb(){try{const raw=localStorage.getItem(DB_KEY);if(raw){const d=JSON.parse(raw);if(d&&d.settings)return normalizeDb(d)}}catch(e){}return null}
 function save(){try{localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(e){toast('تعذر الحفظ — مساحة التخزين ممتلئة','err')}}
 function audit(action,entity,details){
   db.audit.unshift({id:uid(),at:new Date().toISOString(),action,entity,details:details||'',user:'مدير النظام'});
@@ -1398,6 +1405,7 @@ let tplQ='';
 function vTemplates(){
   let list=[...db.templates];
   if(tplQ){const q=tplQ.toLowerCase();list=list.filter(t=>[t.name,t.content].some(v=>(v||'').toLowerCase().includes(q)))}
+  const saved=[...(db.savedDocs||[])].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
   return '<div class="page-head"><h2>القوالب والأدوات <span class="badge soft latin">'+list.length+'</span></h2><button class="btn primary" onclick="openTplModal()">'+ic('plus',15)+' قالب جديد</button></div>'+
   '<div class="filters"><input class="inp grow" placeholder="بحث…" value="'+esc(tplQ)+'" oninput="tplQ=this.value;renderNavless()"></div>'+
   '<div style="font-size:12px;color:var(--mutedFg);margin-bottom:12px">'+ic('bell',12)+' المتغيرات المتاحة عند الاستخدام: '+TEMPLATE_VARIABLES.map(v=>'<span class="chip latin" style="margin:2px">'+v+'</span>').join('')+'</div>'+
@@ -1405,7 +1413,41 @@ function vTemplates(){
     '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><b>'+esc(t.name)+'</b>'+badge(TEMPLATE_TYPES[t.type]||t.type,'#0ea5e9')+'</div>'+
     '<div style="font-size:12.5px;color:var(--mutedFg);margin-top:8px;white-space:pre-wrap;max-height:110px;overflow:hidden">'+esc(t.content)+'</div>'+
     '<div class="row-actions" style="margin-top:10px"><button class="btn sm primary" onclick="useTemplate(\''+t.id+'\')">'+ic('send',13)+' استخدام</button><button class="btn sm icon" onclick="openTplModal(\''+t.id+'\')">'+ic('pencil',13)+'</button><button class="btn sm icon" onclick="delTpl(\''+t.id+'\')">'+ic('trash',13)+'</button></div>'+
-  '</div>').join('')+'</div>':emptyBox('file','لا توجد قوالب','أضف قوالب رسائل وخطابات جاهزة تملأ ببيانات العميل تلقائياً'));
+  '</div>').join('')+'</div>':emptyBox('file','لا توجد قوالب','أضف قوالب رسائل وخطابات جاهزة تملأ ببيانات العميل تلقائياً'))+
+  '<div class="card pad" style="margin-top:18px"><div class="sec-title">'+ic('pen',16)+' الأدوات السريعة</div>'+
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">'+
+    '<div class="tool-box"><div class="tb-title">'+ic('file',16)+' تحويل PDF إلى صور</div>'+
+      '<div class="tb-sub">حوّل كل صفحات أي ملف PDF إلى صور PNG أو JPG بجودة عالية — يعمل داخل النظام بدون مواقع خارجية</div>'+
+      '<button class="btn sm primary" onclick="openPdfTool()">'+ic('image',13)+' فتح الأداة</button></div>'+
+    '<div class="tool-box"><div class="tb-title">'+ic('minimize',16)+' ضغط الصور</div>'+
+      '<div class="tb-sub">صغّر حجم الصور والمستندات الممسوحة (JPG / WebP) مع الحفاظ على وضوحها قبل الإرسال — بدون رفعها لأي موقع</div>'+
+      '<button class="btn sm primary" onclick="openImgTool()">'+ic('image',13)+' فتح الأداة</button></div>'+
+    '<div class="tool-box"><div class="tb-title">'+ic('calculator',16)+' محول الوحدات</div>'+
+      '<div class="tb-sub">كجم ⇄ طن + حساب عدد الحاويات من المتر المكعب</div>'+
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:6px">'+
+        '<input class="inp latin" style="padding:6px 8px" placeholder="كجم" id="ucKgI" oninput="ucKg(this.value)">'+
+        '<span style="color:var(--mutedFg)">=</span>'+
+        '<input class="inp latin" style="padding:6px 8px" placeholder="طن" id="ucTonI" oninput="ucTon(this.value)">'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:6px">'+
+        '<input class="inp latin" style="padding:6px 8px" placeholder="م³ البضاعة" id="ucCbmI" oninput="ucCbm(this.value)">'+
+        '<span id="ucCbmOut" style="font-size:12px;color:var(--mutedFg)"></span>'+
+      '</div>'+
+      '<div class="tb-sub" style="margin-top:6px">سعات تقريبية: 20FT ≈ 28 م³ · 40FT ≈ 58 م³ · 40HC ≈ 68 م³</div></div>'+
+  '</div></div>'+
+  (saved.length?'<div class="card pad" style="margin-top:16px"><div class="sec-title">'+ic('fileCheck',16)+' الوثائق المحفوظة <span class="badge soft latin">'+saved.length+'</span><span style="font-weight:400;font-size:11px;color:var(--mutedFg)">— كل رسالة أو خطاب تستخدمه يتسجل هنا تلقائياً</span></div>'+
+  '<div style="max-height:430px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">'+
+    saved.map(d=>'<div class="list-row" style="border:1px solid var(--border);border-radius:10px;padding:10px;gap:10px">'+
+      '<div class="grow" style="min-width:0"><b style="font-size:13px">'+esc(d.title)+'</b>'+
+      '<div style="font-size:12px;color:var(--mutedFg);white-space:pre-wrap;margin-top:4px;max-height:44px;overflow:hidden">'+esc(d.text)+'</div>'+
+      '<div style="font-size:10.5px;color:var(--mutedFg);margin-top:4px">'+fmtDT(d.createdAt)+'</div></div>'+
+      '<div class="row-actions"><button class="btn sm icon" title="طباعة" onclick="sdPrint(\''+d.id+'\')">'+ic('printer',13)+'</button>'+
+      '<button class="btn sm icon" title="حفظ PNG" onclick="sdPng(\''+d.id+'\')">'+ic('image',13)+'</button>'+
+      '<button class="btn sm icon" title="حفظ PDF" onclick="sdPdf(\''+d.id+'\')">'+ic('download',13)+'</button>'+
+      '<button class="btn sm icon" title="نسخ النص" onclick="sdCopy(\''+d.id+'\')">'+ic('copy',13)+'</button>'+
+      '<button class="btn sm icon" title="حذف" onclick="sdDel(\''+d.id+'\')">'+ic('trash',13)+'</button></div>'+
+    '</div>').join('')+
+  '</div></div>':'');
 }
 function openTplModal(id){
   const t=id?db.templates.find(x=>x.id===id):null;
@@ -1439,7 +1481,13 @@ function useTemplate(id){
   '</div>'+
   '<div class="form-sec">النص الناتج</div>'+
   '<textarea class="ta" id="uOut" style="min-height:170px"></textarea>'+
-  '<div class="modal-foot"><button class="btn primary" onclick="copyOut()">'+ic('copy',14)+' نسخ النص</button><button class="btn" onclick="closeModal()">إغلاق</button></div>');
+  '<div class="modal-foot" style="flex-wrap:wrap;gap:8px;justify-content:flex-start">'+
+    '<button class="btn primary" onclick="outSave(\''+id+'\')" title="حفظ الوثيقة في النظام">'+ic('check',14)+' حفظ</button>'+
+    '<button class="btn" onclick="outPrint(\''+id+'\')" title="حفظ ثم طباعة">'+ic('printer',14)+' طباعة</button>'+
+    '<button class="btn" onclick="outPng(\''+id+'\')" title="حفظ ثم تنزيل صورة">'+ic('image',14)+' PNG</button>'+
+    '<button class="btn" onclick="outPdf(\''+id+'\')" title="حفظ ثم تنزيل PDF">'+ic('download',14)+' PDF</button>'+
+    '<button class="btn" onclick="copyOut()" title="نسخ النص للحافظة">'+ic('copy',14)+' نسخ</button>'+
+    '<button class="btn" onclick="closeModal()">إغلاق</button></div>');
   useTplRender(id);
 }
 function useTplRender(id){
@@ -1463,6 +1511,292 @@ function fallbackCopy(txt){
   try{document.execCommand('copy');toast('تم النسخ')}catch{toast('انسخ النص يدوياً','err')}
   ta.remove();
 }
+
+/* ============ تصدير الوثائق: حفظ / طباعة / PNG / PDF ============ */
+function getOutState(tplId){
+  const t=db.templates.find(x=>x.id===tplId);
+  const c=db.clients.find(x=>x.id===$('#uClient').value);
+  const s=db.shipments.find(x=>x.id===$('#uShip').value);
+  const text=$('#uOut').value||'';
+  let title=t?t.name:'وثيقة';
+  if(c)title+=' — '+c.name;
+  if(s)title+=' — '+s.fileNo;
+  const meta=c?('العميل: '+c.name+(s?' · الملف: '+s.fileNo:'')):(s?'الملف: '+s.fileNo:'');
+  return {text,title,meta};
+}
+function saveOutDoc(tplId){
+  const st=getOutState(tplId);
+  if(!st.text.trim()){toast('لا يوجد نص لحفظه','err');return null}
+  const doc={id:uid(),title:st.title,text:st.text,createdAt:new Date().toISOString()};
+  db.savedDocs.unshift(doc);
+  if(db.savedDocs.length>200)db.savedDocs.length=200;
+  audit('CREATE','SavedDoc',st.title);save();
+  return doc;
+}
+function outSave(tplId){if(saveOutDoc(tplId)){renderNavless();toast('تم حفظ الوثيقة في «الوثائق المحفوظة»')}}
+function outPrint(tplId){const d=saveOutDoc(tplId);if(!d)return;const st=getOutState(tplId);printText(st.title,st.text,st.meta);toast('تم الحفظ — افتح نافذة الطباعة واختر «حفظ كـ PDF» إن أردت')}
+function outPng(tplId){const d=saveOutDoc(tplId);if(!d)return;pngFromDoc(d);toast('تم الحفظ — جارٍ تجهيز صورة PNG')}
+function outPdf(tplId){const d=saveOutDoc(tplId);if(!d)return;pdfFromDoc(d);toast('تم الحفظ — جارٍ تجهيز ملف PDF')}
+/* أزرار الوثائق المحفوظة */
+function sdDoc(id){return (db.savedDocs||[]).find(x=>x.id===id)}
+function sdPrint(id){const d=sdDoc(id);if(d)printText(d.title,d.text)}
+async function sdPng(id){const d=sdDoc(id);if(d)pngFromDoc(d)}
+async function sdPdf(id){const d=sdDoc(id);if(d)pdfFromDoc(d)}
+function sdCopy(id){const d=sdDoc(id);if(!d)return;if(navigator.clipboard)navigator.clipboard.writeText(d.text).then(()=>toast('تم النسخ'),()=>fallbackCopy(d.text));else fallbackCopy(d.text)}
+function sdDel(id){const d=sdDoc(id);if(!d)return;confirmBox('حذف الوثيقة المحفوظة "'+d.title+'"؟',()=>{db.savedDocs=db.savedDocs.filter(x=>x.id!==id);audit('DELETE','SavedDoc',d.title);save();renderNavless();toast('تم الحذف')})}
+
+/* ---------- طباعة نص حر (نفس نظام طباعة الفواتير) ---------- */
+function printText(title,text,meta){
+  const s=db.settings;
+  $('#printArea').innerHTML=
+  '<div class="ph"><div><div style="font-size:22px;font-weight:800;color:#1e6f63">'+esc(s.company||'تلا للتخليص الجمركي')+'</div>'+
+  (s.address?'<div style="font-size:12px">'+esc(s.address)+'</div>':'')+
+  (s.phone?'<div style="font-size:12px" class="latin">ت: '+esc(s.phone)+'</div>':'')+
+  (s.taxId?'<div style="font-size:12px" class="latin">س.ت: '+esc(s.taxId)+'</div>':'')+'</div>'+
+  '<div style="text-align:left"><div style="font-size:17px;font-weight:800">'+esc(title)+'</div><div class="latin" style="font-size:12px">'+fmtDT(new Date().toISOString())+'</div></div></div>'+
+  (meta?'<div style="margin-bottom:10px;font-size:13px"><b>'+esc(meta)+'</b></div>':'')+
+  '<div style="white-space:pre-wrap;font-size:14px;line-height:2">'+esc(text)+'</div>'+
+  '<div style="margin-top:24px;font-size:10px;color:#888;text-align:center">تصميم وتطوير Ziad Ashraf</div>';
+  window.print();
+}
+
+/* ---------- رسم الوثيقة على Canvas (لـ PNG و PDF) ---------- */
+function rr(x,px,py,w,h,r){x.beginPath();x.moveTo(px+r,py);x.arcTo(px+w,py,px+w,py+h,r);x.arcTo(px+w,py+h,px,py+h,r);x.arcTo(px,py+h,px,py,r);x.arcTo(px,py,px+w,py,r);x.closePath()}
+function clipTxt(x,txt,maxW){if(x.measureText(txt).width<=maxW)return txt;let t=txt;while(t.length>1&&x.measureText(t+'…').width>maxW)t=t.slice(0,-1);return t+'…'}
+function wrapAr(ctx,text,maxW){
+  const out=[];
+  for(const para of String(text||'').split('\n')){
+    if(!para.trim()){out.push('');continue}
+    let cur='';
+    for(const w of para.split(/\s+/)){
+      const t=cur?cur+' '+w:w;
+      if(ctx.measureText(t).width<=maxW)cur=t;
+      else{
+        if(cur){out.push(cur);cur=''}
+        if(ctx.measureText(w).width>maxW){let s='';for(const ch of w){if(ctx.measureText(s+ch).width>maxW){out.push(s);s=ch}else s+=ch}cur=s}
+        else cur=w;
+      }
+    }
+    if(cur)out.push(cur);
+  }
+  return out;
+}
+function safeName(s){return String(s||'وثيقة').replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim().slice(0,60)||'وثيقة'}
+async function docCanvases(title,text,meta){
+  try{if(document.fonts&&document.fonts.ready)await document.fonts.ready}catch(e){}
+  const W=1240,H=1754,M=90,Y0=M+160,LINE=34,LINES=Math.floor((H-90-Y0)/LINE);
+  const TEAL='#1e6f63',pages=[];
+  const mkPage=()=>{
+    const c=document.createElement('canvas');c.width=W;c.height=H;
+    const x=c.getContext('2d');
+    x.fillStyle='#ffffff';x.fillRect(0,0,W,H);
+    // الترويسة: شعار + بيانات الشركة
+    x.fillStyle=TEAL;rr(x,W-M-64,M,64,64,14);x.fill();
+    x.fillStyle='#fff';x.font='800 27px Cairo, sans-serif';x.textAlign='center';x.textBaseline='middle';
+    x.fillText('تلا',W-M-32,M+34);x.textBaseline='alphabetic';
+    x.textAlign='right';x.fillStyle='#111';x.font='800 24px Cairo, sans-serif';
+    x.fillText(db.settings.company||'تلا للتخليص الجمركي',W-M-80,M+26);
+    x.fillStyle='#666';x.font='400 14px Cairo, sans-serif';
+    const sub=[];if(db.settings.phone)sub.push('ت: '+db.settings.phone);if(db.settings.taxId)sub.push('س.ت: '+db.settings.taxId);
+    x.fillText(sub.join('  ·  '),W-M-80,M+52);
+    // عنوان الوثيقة
+    x.font='700 19px Cairo, sans-serif';
+    const tw=Math.min(x.measureText(title).width+44,430);
+    x.fillStyle=TEAL;rr(x,M,M-4,tw,42,10);x.fill();
+    x.fillStyle='#fff';x.textAlign='left';x.fillText(clipTxt(x,title,tw-24),M+22,M+24);
+    // فاصل + سطر البيانات
+    x.fillStyle='#dbe5e2';x.fillRect(M,M+84,W-2*M,2);
+    x.fillStyle='#333';x.font='600 16px Cairo, sans-serif';x.textAlign='right';
+    x.fillText(meta||('التاريخ: '+fmtDate(today())),W-M,M+126);
+    return {c,x};
+  };
+  const probe=document.createElement('canvas').getContext('2d');
+  probe.font='400 17px Cairo, sans-serif';
+  const wrapped=wrapAr(probe,text,W-2*M);
+  const nPages=Math.max(1,Math.ceil(wrapped.length/LINES));
+  for(let p=0;p<nPages;p++){
+    const {c,x}=mkPage();
+    x.font='400 17px Cairo, sans-serif';x.direction='rtl';x.textAlign='right';x.fillStyle='#1a1a1a';
+    let y=Y0;
+    for(const ln of wrapped.slice(p*LINES,(p+1)*LINES)){x.fillText(ln,W-M,y);y+=LINE}
+    x.fillStyle='#8a9a95';x.font='400 12px Cairo, sans-serif';x.textAlign='center';
+    x.fillText('تم إنشاء هذه الوثيقة من نظام تلا للتخليص الجمركي — '+new Date().toLocaleString('ar-EG-u-nu-latn')+' · تصميم وتطوير Ziad Ashraf',W/2,H-46);
+    pages.push(c);
+  }
+  return pages;
+}
+async function pngFromDoc(d){
+  const pages=await docCanvases(d.title,d.text);
+  const base=safeName(d.title);
+  if(pages.length===1)download(base+'.png',pages[0].toDataURL('image/png'));
+  else pages.forEach((c,i)=>setTimeout(()=>download(base+'-صفحة-'+(i+1)+'.png',c.toDataURL('image/png')),i*350));
+}
+/* كاتب PDF مصغّر (JPEG مدمج) — بدون أي مكتبات خارجية */
+async function pdfFromDoc(d){
+  const pages=await docCanvases(d.title,d.text);
+  pagesToPdf(pages,safeName(d.title)+'.pdf');
+}
+function pagesToPdf(cvs,fname){
+  const PW=595.28,PH=841.89,n=cvs.length;
+  const parts=[],offs=[];let pos=0;
+  const w=s=>{let u;if(typeof s==='string'){u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i)&255}else u=s;parts.push(u);pos+=u.length};
+  const b64u8=b=>{const s=atob(b);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u};
+  w('%PDF-1.4\n%\u00E2\u00E3\u00CF\u00D3\n');
+  const kids=[];
+  for(let i=0;i<n;i++){
+    const pno=3+i*3,cno=pno+1,ino=pno+2;kids.push(pno+' 0 R');
+    const data=b64u8(cvs[i].toDataURL('image/jpeg',0.92).split(',')[1]);
+    const stream='q\n'+PW+' 0 0 '+PH+' 0 0 cm\n/Im'+i+' Do\nQ\n';
+    offs[pno]=pos;
+    w(pno+' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PW+' '+PH+'] /Resources << /XObject << /Im'+i+' '+ino+' 0 R >> >> /Contents '+cno+' 0 R >>\nendobj\n');
+    offs[cno]=pos;
+    w(cno+' 0 obj\n<< /Length '+stream.length+' >>\nstream\n'+stream+'endstream\nendobj\n');
+    offs[ino]=pos;
+    w(ino+' 0 obj\n<< /Type /XObject /Subtype /Image /Width '+cvs[i].width+' /Height '+cvs[i].height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+data.length+' >>\nstream\n');
+    w(data);w('\nendstream\nendobj\n');
+  }
+  offs[1]=pos;w('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  offs[2]=pos;w('2 0 obj\n<< /Type /Pages /Kids ['+kids.join(' ')+'] /Count '+n+' >>\nendobj\n');
+  const xref=pos;
+  let xr='xref\n0 '+(3+n*3)+'\n0000000000 65535 f \n';
+  for(let i=1;i<3+n*3;i++)xr+=String(offs[i]||0).padStart(10,'0')+' 00000 n \n';
+  w(xr+'trailer\n<< /Size '+(3+n*3)+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF');
+  download(fname,new Blob(parts,{type:'application/pdf'}));
+}
+
+/* ============ أداة تحويل PDF إلى صور ============ */
+let pdfjsP=null;
+function loadPdfJs(){
+  if(window.pdfjsLib){window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';return Promise.resolve(window.pdfjsLib)}
+  if(pdfjsP)return pdfjsP;
+  pdfjsP=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=()=>{try{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';res(window.pdfjsLib)}catch(e){pdfjsP=null;rej(e)}};
+    s.onerror=()=>{pdfjsP=null;rej(new Error('net'))};
+    document.head.appendChild(s);
+  });
+  return pdfjsP;
+}
+function openPdfTool(){
+  window._pdfPages=null;window._pdfName='pdf';
+  openModal('<h3>'+ic('file',18)+' تحويل PDF إلى صور</h3>'+
+  '<p class="msub">يعمل داخل النظام بالكامل — كل صفحة في الملف ستتحول لصورة منفصلة تنزلها بضغطة واحدة (يلزم اتصال بالإنترنت أول مرة فقط لتحميل محرك التحويل)</p>'+
+  '<div class="fgrid c2">'+
+    '<div style="grid-column:1/-1"><label class="f">ملف PDF *</label><input type="file" accept="application/pdf,.pdf" class="inp" id="pdfFile" style="padding:7px"></div>'+
+    '<div><label class="f">صيغة الصور</label><select class="sel" id="pdfFmt" onchange="pdfFmtToggle()"><option value="png" selected>PNG — أعلى جودة</option><option value="jpg">JPG — حجم أصغر</option></select></div>'+
+    '<div><label class="f">دقة التحويل</label><select class="sel" id="pdfScale"><option value="1">عادية</option><option value="1.5" selected>عالية</option><option value="2">عالية جداً</option></select></div>'+
+    '<div style="grid-column:1/-1;display:none" id="pdfQRow"><label class="f">جودة JPG: <span id="pdfQv">85</span>%</label><input type="range" min="30" max="95" value="85" class="inp" id="pdfQ" style="padding:0" oninput="pdfQUpd(this.value)"></div>'+
+  '</div>'+
+  '<div class="modal-foot" style="justify-content:flex-start;flex-wrap:wrap;gap:8px"><button class="btn primary" id="pdfGo" onclick="runPdfConvert()">'+ic('check',14)+' بدء التحويل</button><button class="btn" onclick="closeModal()">إغلاق</button></div>'+
+  '<div id="pdfRes"></div>',true);
+}
+function pdfFmtToggle(){const r=$('#pdfQRow');if(r)r.style.display=$('#pdfFmt').value==='jpg'?'':'none'}
+function pdfQUpd(v){const el=$('#pdfQv');if(el)el.textContent=v}
+async function runPdfConvert(){
+  const inp=$('#pdfFile');const f=inp&&inp.files&&inp.files[0];
+  if(!f){toast('اختر ملف PDF أولاً','err');return}
+  const go=$('#pdfGo');go.disabled=true;go.textContent='جارٍ التحميل…';
+  try{
+    const lib=await loadPdfJs();
+    const fmt=$('#pdfFmt').value,scale=parseFloat($('#pdfScale').value)*1.5,q=parseInt($('#pdfQ').value)/100;
+    go.textContent='جارٍ التحويل…';
+    const buf=await f.arrayBuffer();
+    const pdf=await lib.getDocument({data:buf}).promise;
+    window._pdfPages=[];window._pdfName=safeName(f.name.replace(/\.pdf$/i,''))||'pdf';
+    for(let i=1;i<=pdf.numPages;i++){
+      go.textContent='جارٍ التحويل… صفحة '+i+' من '+pdf.numPages;
+      const pg=await pdf.getPage(i);
+      const vp=pg.getViewport({scale});
+      const c=document.createElement('canvas');c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+      await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      window._pdfPages.push({url:c.toDataURL(fmt==='jpg'?'image/jpeg':'image/png',q)});
+    }
+    drawPdfRes();
+    toast('تم تحويل '+window._pdfPages.length+' '+(window._pdfPages.length===1?'صفحة':'صفحات'));
+  }catch(e){
+    toast(e&&e.message==='net'?'تعذر تحميل محرك التحويل — تأكد من الاتصال بالإنترنت ثم أعد المحاولة':'فشل التحويل — تأكد أن الملف PDF سليم','err');
+  }finally{go.disabled=false;go.textContent='بدء التحويل'}
+}
+function drawPdfRes(){
+  const el=$('#pdfRes');if(!el)return;
+  const ps=window._pdfPages||[];
+  el.innerHTML=ps.length?
+    '<div class="form-sec">النتائج — '+ps.length+' '+(ps.length===1?'صفحة':'صفحات')+'</div>'+
+    '<div class="modal-foot" style="justify-content:flex-start;margin-bottom:10px"><button class="btn primary" onclick="dlAllPdf()">'+ic('download',14)+' تنزيل الكل</button></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;max-height:330px;overflow-y:auto">'+
+    ps.map((p,i)=>'<div style="border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center;background:var(--muted)"><img src="'+p.url+'" alt="صفحة '+(i+1)+'" style="width:100%;border-radius:6px;border:1px solid var(--border);display:block"><div style="font-size:11.5px;margin:6px 0">صفحة '+(i+1)+'</div><button class="btn sm" onclick="dlPdfPage('+i+')">'+ic('download',12)+' تنزيل</button></div>').join('')+
+    '</div>':'';
+}
+function dlPdfPage(i){
+  const ps=window._pdfPages||[];if(!ps[i])return;
+  download(window._pdfName+'-صفحة-'+(i+1)+'.'+(ps[i].url.startsWith('data:image/jpeg')?'jpg':'png'),ps[i].url);
+}
+function dlAllPdf(){(window._pdfPages||[]).forEach((p,i)=>setTimeout(()=>dlPdfPage(i),i*400))}
+
+/* ============ أداة ضغط الصور ============ */
+let imgDeb=null;
+function openImgTool(){
+  window._imgRes=[];
+  openModal('<h3>'+ic('minimize',18)+' ضغط الصور</h3>'+
+  '<p class="msub">صغّر حجم الصور قبل إرسالها على واتساب أو الإيميل — المعالجة تتم على جهازك بالكامل ولا تُرفع الصور لأي موقع</p>'+
+  '<div class="fgrid c2">'+
+    '<div style="grid-column:1/-1"><label class="f">اختر صورة أو أكثر *</label><input type="file" accept="image/*" multiple class="inp" id="imgFiles" style="padding:7px" onchange="runImgCompress(this)"></div>'+
+    '<div><label class="f">أقصى عرض للصورة</label><select class="sel" id="imgMax" onchange="imgSettingsChanged()"><option value="0">القياس الأصلي</option><option value="1920">1920 بكسل</option><option value="1280" selected>1280 بكسل — مناسب للإرسال</option><option value="800">800 بكسل — أصغر حجماً</option></select></div>'+
+    '<div><label class="f">صيغة الإخراج</label><select class="sel" id="imgFmt" onchange="imgSettingsChanged()"><option value="jpg" selected>JPG</option><option value="webp">WebP — أصغر حجماً</option></select></div>'+
+    '<div style="grid-column:1/-1"><label class="f">جودة الضغط: <span id="imgQv">75</span>%</label><input type="range" min="30" max="95" value="75" class="inp" id="imgQ" style="padding:0" oninput="imgQUpd(this.value);imgSettingsChanged()"></div>'+
+  '</div>'+
+  '<div id="imgRes"></div>'+
+  '<div class="modal-foot" style="justify-content:flex-start"><button class="btn" onclick="closeModal()">إغلاق</button></div>',true);
+}
+function imgQUpd(v){const el=$('#imgQv');if(el)el.textContent=v}
+function imgSettingsChanged(){clearTimeout(imgDeb);imgDeb=setTimeout(()=>{const inp=$('#imgFiles');if(inp&&inp.files&&inp.files.length)runImgCompress(inp,true)},450)}
+async function runImgCompress(inp,keepMsg){
+  const files=inp&&inp.files?Array.from(inp.files):[];
+  if(!files.length){if(!keepMsg)toast('اختر صورة واحدة على الأقل','err');return}
+  if(!$('#imgRes'))return;
+  const maxW=parseInt($('#imgMax').value),fmt=$('#imgFmt').value,q=parseInt($('#imgQ').value)/100;
+  $('#imgRes').innerHTML='<div style="font-size:13px;color:var(--mutedFg)">جارٍ الضغط…</div>';
+  const out=[];
+  try{
+    for(const f of files){
+      const url=URL.createObjectURL(f);
+      const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('img'));im.src=url});
+      const sc=maxW&&img.width>maxW?maxW/img.width:1;
+      const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*sc));c.height=Math.max(1,Math.round(img.height*sc));
+      const x=c.getContext('2d');
+      if(fmt==='jpg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}
+      x.drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url);
+      let blob=await new Promise(r=>c.toBlob(r,fmt==='jpg'?'image/jpeg':'image/webp',q));
+      let used=fmt;
+      if(!blob){blob=await new Promise(r=>c.toBlob(r,'image/jpeg',q));used='jpg'}
+      out.push({name:safeName(f.name.replace(/\.[^.]+$/,''))+'-مضغوط.'+(used==='jpg'?'jpg':'webp'),orig:f.size,blob,url:URL.createObjectURL(blob),w:c.width,h:c.height});
+    }
+  }catch(e){$('#imgRes').innerHTML='';toast('تعذر قراءة إحدى الصور — تأكد أنها صورة سليمة','err');return}
+  window._imgRes=out;
+  const oT=out.reduce((s,o)=>s+o.orig,0),nT=out.reduce((s,o)=>s+o.blob.size,0);
+  const pct=oT?Math.max(0,Math.round((1-nT/oT)*100)):0;
+  $('#imgRes').innerHTML=
+    '<div class="form-sec">النتائج — وفّرت '+pct+'% من الحجم ('+fmtBytes(oT)+' ← '+fmtBytes(nT)+')</div>'+
+    (out.length>1?'<div class="modal-foot" style="justify-content:flex-start;margin-bottom:10px"><button class="btn primary" onclick="dlAllImgs()">'+ic('download',14)+' تنزيل الكل</button></div>':'')+
+    '<div style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto">'+
+    out.map((o,i)=>'<div class="list-row" style="border:1px solid var(--border);border-radius:10px;padding:8px;gap:10px">'+
+      '<img src="'+o.url+'" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">'+
+      '<div class="grow" style="min-width:0"><b style="font-size:12.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(o.name)+'</b>'+
+      '<span style="font-size:11.5px;color:var(--mutedFg)">'+fmtBytes(o.orig)+' ← <b style="color:var(--primary)">'+fmtBytes(o.blob.size)+'</b> · '+o.w+'×'+o.h+'</span></div>'+
+      '<button class="btn sm" onclick="dlImg('+i+')">'+ic('download',12)+' تنزيل</button></div>').join('')+
+    '</div>';
+  toast('تم ضغط '+out.length+' '+(out.length===1?'صورة':'صور')+' بنجاح');
+}
+function dlImg(i){const o=(window._imgRes||[])[i];if(o)download(o.name,o.blob)}
+function dlAllImgs(){(window._imgRes||[]).forEach((o,i)=>setTimeout(()=>dlImg(i),i*400))}
+function fmtBytes(b){if(!b||b<0)return '0 ب';if(b<1024)return b+' ب';if(b<1048576)return (b/1024).toFixed(1)+' KB';return (b/1048576).toFixed(2)+' MB'}
+
+/* ---------- محول الوحدات ---------- */
+function ucKg(v){const n=Number(v);const t=$('#ucTonI');if(t)t.value=n?String(Math.round((n/1000)*1000)/1000):''}
+function ucTon(v){const n=Number(v);const k=$('#ucKgI');if(k)k.value=n?String(Math.round(n*1000)):''}
+function ucCbm(v){const n=Number(v);const o=$('#ucCbmOut');if(o)o.textContent=n>0?Math.ceil(n/68)+' × 40HC تقريباً ('+fmtN(n)+' م³)':''}
 
 /* ============ الإعدادات ============ */
 function vSettings(){
@@ -1495,10 +1829,6 @@ function vSettings(){
   '</div><div>'+
   '<div class="card pad"><div class="sec-title">'+ic('clock',16)+' سجل العمليات (آخر 30)</div>'+
   '<div style="max-height:340px;overflow-y:auto">'+(db.audit.slice(0,30).map(a=>'<div class="list-row"><div class="grow"><b style="font-size:12px">'+esc(a.action)+' — '+esc(a.entity)+'</b>'+(a.details?'<div style="font-size:11.5px;color:var(--mutedFg)">'+esc(a.details)+'</div>':'')+'</div><span style="font-size:10.5px;color:var(--mutedFg)">'+fmtDT(a.at)+'</span></div>').join('')||'<div style="color:var(--mutedFg);font-size:13px">لا عمليات بعد</div>')+'</div>'+
-  '</div>'+
-  '<div class="card pad" style="margin-top:14px"><div class="sec-title">'+ic('facebook',16)+' حول النظام</div>'+
-  '<div style="font-size:13px;line-height:2">نظام تلا لإدارة الملفات والشحنات والتخليص الجمركي — النسخة الثابتة (HTML).<br>تعمل بدون سيرفر على GitHub Pages، والبيانات تُحفظ داخل متصفح الجهاز.</div>'+
-  '<a class="credit" style="margin-top:10px;display:inline-flex" href="'+OWNER_URL+'" target="_blank" rel="noopener" data-credit></a>'+
   '</div>'+
   '</div></div>';
 }
@@ -1534,7 +1864,7 @@ function importData(inp){
       const d=JSON.parse(r.result);
       if(!d||!d.settings||!Array.isArray(d.clients))throw new Error('bad');
       confirmBox('سيتم استبدال كل البيانات الحالية ببيانات النسخة المستوردة. متابعة؟',()=>{
-        db=d;save();applyTheme();render();toast('تم استيراد البيانات بنجاح');
+        db=normalizeDb(d);save();applyTheme();render();toast('تم استيراد البيانات بنجاح');
       });
     }catch(e){toast('ملف النسخة الاحتياطية غير صالح','err')}
   };
